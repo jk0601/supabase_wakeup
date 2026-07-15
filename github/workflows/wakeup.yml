@@ -1,0 +1,59 @@
+name: Daily Wakeup
+
+# 매일 아침 6시(KST)에 Supabase wakeup 테이블의 created_at을 갱신합니다.
+# GitHub Actions의 cron은 항상 UTC 기준입니다.
+#   06:00 KST = 21:00 UTC (전날)  ->  '0 21 * * *'
+# 참고: 무료 러너의 예약 실행은 트래픽이 몰리면 수 분~수십 분 지연될 수 있습니다.
+
+on:
+  schedule:
+    - cron: "0 21 * * *"
+  workflow_dispatch: {}   # Actions 탭에서 수동 실행(Run workflow) 가능
+
+# 동시 실행 방지(예약과 수동 실행이 겹칠 때)
+concurrency:
+  group: wakeup
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Update wakeup timestamp in Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+
+          # 한국 시간 기준 ISO 8601 타임스탬프 (예: 2026-06-09T06:00:03+09:00)
+          NOW="$(TZ='Asia/Seoul' date '+%Y-%m-%dT%H:%M:%S%:z')"
+          echo "Updating wakeup.created_at -> ${NOW}"
+
+          # id = 1 행의 created_at을 갱신 (PATCH)
+          HTTP_CODE=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
+            -X PATCH "${SUPABASE_URL}/rest/v1/wakeup?id=eq.1" \
+            -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=representation" \
+            -d "{\"created_at\": \"${NOW}\"}")
+
+          echo "Response (HTTP ${HTTP_CODE}):"
+          cat /tmp/resp.json
+          echo
+
+          # 2xx가 아니면 실패 처리
+          if [ "${HTTP_CODE}" -lt 200 ] || [ "${HTTP_CODE}" -ge 300 ]; then
+            echo "::error::Supabase 갱신 실패 (HTTP ${HTTP_CODE})"
+            exit 1
+          fi
+
+          # 갱신된 행이 없으면(=id 1 행이 없으면) 경고 후 실패
+          if [ "$(cat /tmp/resp.json)" = "[]" ]; then
+            echo "::error::id=1 인 행을 찾지 못했습니다. wakeup 테이블에 id=1 행이 있는지 확인하세요."
+            exit 1
+          fi
+
+          echo "✅ wakeup 갱신 완료"

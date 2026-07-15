@@ -1,0 +1,67 @@
+name: Cleanup old runs
+
+# 매일 09:00 KST에 워크플로 run 기록을 정리합니다.
+# 최신 10개만 남기고 나머지(완료된 run)는 삭제합니다.
+#   09:00 KST = 00:00 UTC  ->  '0 0 * * *'  (GitHub cron은 항상 UTC)
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}   # 수동 실행(Run workflow) 가능
+
+# run 삭제에는 actions: write 권한이 반드시 필요합니다.
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: cleanup-runs
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Delete old workflow runs (keep newest 10)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          KEEP: 10
+          # 특정 워크플로만 정리하려면 파일명을 넣으세요. 비우면 저장소 전체 run 대상.
+          #   예) WORKFLOW: wakeup.yml
+          WORKFLOW: ""
+        run: |
+          set -euo pipefail
+
+          # 완료된 run의 ID를 최신순으로 수집
+          if [ -n "${WORKFLOW}" ]; then
+            mapfile -t ids < <(gh run list --repo "$REPO" --workflow "$WORKFLOW" \
+              --limit 300 --json databaseId,status \
+              --jq '.[] | select(.status=="completed") | .databaseId')
+          else
+            mapfile -t ids < <(gh run list --repo "$REPO" \
+              --limit 300 --json databaseId,status \
+              --jq '.[] | select(.status=="completed") | .databaseId')
+          fi
+
+          total=${#ids[@]}
+          echo "완료된 run: ${total}개 (보관 기준: 최신 ${KEEP}개)"
+
+          if [ "${total}" -le "${KEEP}" ]; then
+            echo "삭제할 오래된 run이 없습니다."
+            exit 0
+          fi
+
+          deleted=0
+          for (( i=KEEP; i<total; i++ )); do
+            id="${ids[$i]}"
+            echo "삭제: run #${id}"
+            if gh run delete "${id}" --repo "$REPO"; then
+              deleted=$((deleted+1))
+            else
+              echo "  (삭제 실패 또는 이미 삭제됨: ${id})"
+            fi
+          done
+
+          echo "✅ ${deleted}개 삭제 완료 (보관 ${KEEP}개)"
