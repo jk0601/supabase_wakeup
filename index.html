@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Wakeup · 마지막 기상 기록</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --night:#14112b;
+    --dusk:#2a1f4d;
+    --plum:#4a3270;
+    --coral:#ff8a65;
+    --apricot:#ffb088;
+    --gold:#ffd49a;
+    --cream:#fff6ec;
+    --ink:#1a1530;
+    --muted:#b8aad0;
+    --face:#fbf3e8;
+    --rim:#241a40;
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  html,body{ height:100%; }
+
+  body{
+    min-height:100dvh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:clamp(32px,6vw,64px);
+    padding:clamp(40px,6vw,72px) clamp(16px,4vw,40px);
+    font-family:"Inter",system-ui,sans-serif;
+    color:var(--cream);
+    background:
+      radial-gradient(120% 90% at 50% 118%, var(--coral) 0%, rgba(255,138,101,0) 42%),
+      radial-gradient(90% 70% at 50% 108%, var(--apricot) 0%, rgba(255,176,136,0) 38%),
+      linear-gradient(180deg, var(--night) 0%, var(--dusk) 58%, var(--plum) 100%);
+    background-attachment:fixed;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* 멀리 떠 있는 별 몇 개 (위쪽 밤하늘) */
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    pointer-events:none;
+    background-image:
+      radial-gradient(1.4px 1.4px at 12% 14%, rgba(255,255,255,.7) 50%, transparent 51%),
+      radial-gradient(1.2px 1.2px at 78% 9%,  rgba(255,255,255,.55) 50%, transparent 51%),
+      radial-gradient(1.6px 1.6px at 40% 6%,  rgba(255,255,255,.5) 50%, transparent 51%),
+      radial-gradient(1.1px 1.1px at 64% 20%, rgba(255,255,255,.45) 50%, transparent 51%),
+      radial-gradient(1.3px 1.3px at 23% 24%, rgba(255,255,255,.4) 50%, transparent 51%);
+    opacity:.8;
+  }
+
+  .stage{
+    position:relative;
+    z-index:1;
+    width:100%;
+    max-width:460px;
+    text-align:center;
+    animation:rise .9s cubic-bezier(.2,.8,.2,1) both;
+  }
+  @keyframes rise{ from{ opacity:0; transform:translateY(14px);} to{ opacity:1; transform:none;} }
+
+  .eyebrow{
+    font-size:.74rem;
+    letter-spacing:.34em;
+    text-transform:uppercase;
+    color:var(--gold);
+    font-weight:600;
+    margin-bottom:.55rem;
+  }
+  .title{
+    font-family:"Fraunces",serif;
+    font-weight:800;
+    font-size:clamp(2rem,7vw,2.7rem);
+    line-height:1.04;
+    letter-spacing:-.01em;
+    color:var(--cream);
+  }
+  .subtitle{
+    margin-top:.5rem;
+    color:var(--muted);
+    font-size:.92rem;
+  }
+
+  /* 디지털 현재 시각 */
+  .now-big{
+    font-family:"JetBrains Mono",monospace;
+    font-size:clamp(3rem,12vw,5.5rem);
+    font-weight:500;
+    letter-spacing:.04em;
+    font-variant-numeric:tabular-nums;
+    color:var(--cream);
+    line-height:1;
+    margin-top:clamp(16px,4vw,28px);
+    text-shadow:0 0 48px rgba(255,176,136,.35);
+  }
+
+  /* 읽기 영역 */
+  .readout{ margin-top:clamp(22px,5vw,30px); }
+  .record-label{
+    font-size:.72rem; letter-spacing:.26em; text-transform:uppercase;
+    color:var(--apricot); font-weight:600;
+  }
+  .record-date{
+    font-family:"Fraunces",serif; font-weight:600;
+    font-size:clamp(1.15rem,4.5vw,1.5rem);
+    margin-top:.35rem; color:var(--cream);
+  }
+  .record-iso{
+    font-family:"JetBrains Mono",monospace;
+    font-size:.8rem; color:var(--muted); margin-top:.4rem;
+    word-break:break-all;
+  }
+
+  .now-strip{
+    margin-top:1.4rem;
+    display:inline-flex; align-items:baseline; gap:.55rem;
+    padding:.5rem 1rem;
+    border:1px solid rgba(255,212,154,.28);
+    border-radius:999px;
+    background:rgba(255,255,255,.04);
+  }
+  .now-strip .lbl{ font-size:.72rem; letter-spacing:.2em; text-transform:uppercase; color:var(--gold); }
+  .now-strip .val{ font-family:"JetBrains Mono",monospace; font-size:.95rem; color:var(--cream); font-variant-numeric:tabular-nums; }
+
+  .refresh{
+    margin-top:1.5rem;
+    appearance:none; cursor:pointer;
+    font-family:"Inter",sans-serif; font-size:.85rem; font-weight:500;
+    color:var(--cream);
+    padding:.6rem 1.25rem; border-radius:999px;
+    background:linear-gradient(180deg, rgba(255,176,136,.22), rgba(255,138,101,.16));
+    border:1px solid rgba(255,176,136,.4);
+    transition:transform .15s ease, background .2s ease;
+  }
+  .refresh:hover{ background:linear-gradient(180deg, rgba(255,176,136,.34), rgba(255,138,101,.26)); }
+  .refresh:active{ transform:scale(.97); }
+  .refresh:focus-visible{ outline:2px solid var(--gold); outline-offset:3px; }
+  .refresh[disabled]{ opacity:.5; cursor:wait; }
+
+  .status{ margin-top:1rem; min-height:1.2em; font-size:.85rem; color:var(--muted); }
+  .status.error{ color:#ffb4a4; }
+
+
+  @media (prefers-reduced-motion: reduce){
+    .stage{ animation:none; }
+  }
+
+  /* iframe 섹션 */
+  .trends-section{
+    width:100%;
+    max-width:900px;
+    margin:48px auto 0;
+    padding:0 clamp(16px,4vw,40px);
+  }
+  .trends-label{
+    font-size:.72rem; letter-spacing:.26em; text-transform:uppercase;
+    color:var(--apricot); font-weight:600;
+    margin-bottom:.75rem; text-align:center;
+  }
+  .trends-frame{
+    width:100%; height:600px;
+    border:1px solid rgba(255,212,154,.2);
+    border-radius:16px;
+    background:rgba(255,255,255,.03);
+    display:block;
+  }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <p class="eyebrow">Supabase · GitHub Actions</p>
+    <p class="subtitle">매일 오전 KST에 자동으로 깨어납니다</p>
+
+    <p class="now-big" id="nowBig">--:--:--</p>
+
+    <div class="readout">
+      <p class="record-label">기록 시각</p>
+      <p class="record-date" id="recordDate">—</p>
+      <p class="record-iso"  id="recordIso"></p>
+    </div>
+
+    <div>
+      <button class="refresh" id="refreshBtn" type="button">새로고침</button>
+    </div>
+    <p class="status" id="status"></p>
+
+  </main>
+
+<section class="trends-section">
+  <p class="trends-label">Google Trends</p>
+  <iframe
+    class="trends-frame"
+    src="https://googletrends-0mwi.onrender.com/"
+    title="Google Trends"
+    loading="lazy"
+    referrerpolicy="no-referrer"
+  ></iframe>
+</section>
+
+<script>
+  /* ===== 빌드 시 자동 주입 (직접 수정하지 마세요) ===== */
+  const SUPABASE_URL      = "__SUPABASE_URL__";
+  const SUPABASE_ANON_KEY = "__SUPABASE_ANON_KEY__";
+  /* ==================================================== */
+
+  const TABLE      = "wakeup";
+  const COLUMN     = "created_at";
+  const DISPLAY_TZ = "Asia/Seoul";   // 시계와 날짜를 표시할 시간대
+  const AUTO_REFRESH_MS = 60000;     // 60초마다 자동 새로고침
+
+  const $ = (id) => document.getElementById(id);
+
+  function formatKoreanDate(date){
+    return new Intl.DateTimeFormat("ko-KR", {
+      timeZone: DISPLAY_TZ, dateStyle: "full", timeStyle: "medium"
+    }).format(date);
+  }
+
+  function setStatus(msg, isError){
+    const el = $("status");
+    el.textContent = msg || "";
+    el.classList.toggle("error", !!isError);
+  }
+
+  async function loadWakeup(){
+    const btn = $("refreshBtn");
+    btn.disabled = true;
+    setStatus("", false);
+    try{
+      const url = `${SUPABASE_URL}/rest/v1/${TABLE}` +
+        `?select=${COLUMN}&order=${COLUMN}.desc&limit=1`;
+      const res = await fetch(url, {
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`
+        }
+      });
+      if(!res.ok){
+        const body = await res.text();
+        throw new Error(`HTTP ${res.status} — ${body.slice(0,140)}`);
+      }
+      const rows = await res.json();
+      if(!rows.length || !rows[0][COLUMN]){
+        setStatus("", false);
+        return;
+      }
+      const ts = rows[0][COLUMN];
+      const d = new Date(ts);
+      $("recordDate").textContent = formatKoreanDate(d);
+      $("recordIso").textContent  = ts;
+      setStatus("", false);
+    }catch(err){
+      setStatus(`기록을 불러오지 못했습니다 — ${err.message}`, true);
+    }finally{
+      btn.disabled = false;
+    }
+  }
+
+  function tickNow(){
+    $("nowBig").textContent = new Intl.DateTimeFormat("ko-KR", {
+      timeZone: DISPLAY_TZ, hour12: false,
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    }).format(new Date());
+  }
+
+  $("refreshBtn").addEventListener("click", loadWakeup);
+  tickNow();
+  setInterval(tickNow, 1000);
+  loadWakeup();
+  setInterval(loadWakeup, AUTO_REFRESH_MS);
+</script>
+</body>
+</html>
